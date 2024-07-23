@@ -5,43 +5,45 @@ namespace Blazor.SourceGenerators.Parsers;
 
 internal sealed partial class TypeDeclarationParser
 {
-    static readonly Lazy<TypeDeclarationParser> _parser =
+    private static readonly Lazy<TypeDeclarationParser> _parser =
         new(valueFactory: () => new TypeDeclarationParser(TypeDeclarationReader.Default));
 
-    readonly TypeDeclarationReader _reader;
+    private readonly DependencyMapBuilder _mapper;
+    private readonly TypeDeclarationReader _reader;
+
+    internal TypeDeclarationParser(TypeDeclarationReader reader)
+    {
+        _reader = reader;
+        _mapper = new DependencyMapBuilder().WithReader(_reader);
+    }
 
     internal static TypeDeclarationParser Default => _parser.Value;
-
-    internal TypeDeclarationParser(TypeDeclarationReader reader) => _reader = reader;
 
     public ParserResult<CSharpTopLevelObject> ParseTargetType(string typeName)
     {
         ParserResult<CSharpTopLevelObject> result = new(ParserResultStatus.Unknown);
 
-        if (_reader.TryGetInterface(typeName, out var typescriptInterface) && typescriptInterface is not null)
+        _mapper.Build(typeName);
+
+        if (_mapper.Root == default) return result with
         {
-            try
-            {
-                result = result with
-                {
-                    Status = ParserResultStatus.SuccessfullyParsed,
-                    Value = ToTopLevelObject(typescriptInterface)
-                };
-            }
-            catch (Exception ex)
-            {
-                result = result with
-                {
-                    Status = ParserResultStatus.ErrorParsing,
-                    Error = ex.Message
-                };
-            }
-        }
-        else
+            Status = ParserResultStatus.TargetTypeNotFound
+        };
+
+        try
         {
             result = result with
             {
-                Status = ParserResultStatus.TargetTypeNotFound
+                Status = ParserResultStatus.SuccessfullyParsed,
+                Value = ToTopLevelObject(_mapper.Root)
+            };
+        }
+        catch (Exception ex)
+        {
+            result = result with
+            {
+                Status = ParserResultStatus.ErrorParsing,
+                Error = ex.Message
             };
         }
 

@@ -1,51 +1,36 @@
 ﻿// Copyright (c) David Pine. All rights reserved.
 // Licensed under the MIT License.
 
-using System.Reflection.Metadata;
 using Blazor.SourceGenerators.TypeScript.Types;
 
 namespace Blazor.SourceGenerators.Types;
 
 internal class DependencyMapBuilder()
 {
-    private readonly Dictionary<string, DeclarationStatement> _dependencies = [];
+    private static readonly ConcurrentDictionary<string, Dependency> _cache = [];
+
+    private readonly HashSet<string> _found = [];
     private readonly Queue<Node> _processing = [];
 
     private TypeDeclarationReader _reader = TypeDeclarationReader.Default;
 
-    public Dictionary<string, DeclarationStatement> Build(string typeName)
+    public Dependency Root { get; private set; }
+
+    public void Build(string typeName)
     {
-        typeName = FormatTypeName(typeName);
-        if (!TryGetDeclaration(typeName, out var declaration)) return _dependencies;
-
-        if (_dependencies.ContainsKey(typeName)) return _dependencies;
-        _dependencies.Add(typeName, declaration);
-
-        _processing.Enqueue(declaration);
-
-        while (_processing.Count > 0)
+        if (_cache.TryGetValue(typeName, out var root))
         {
-            var node = _processing.Dequeue();
-
-            var methods = node.OfKind(TypeScriptSyntaxKind.MethodSignature);
-            foreach (var method in methods.Cast<MethodSignature>())
-            {
-                BuildMethod(method);
-            }
-
-            var properties = node.OfKind(TypeScriptSyntaxKind.PropertySignature);
-            foreach (var property in properties)
-            {
-                BuildProperty(property);
-            }
-
-            if (node.OfKind(TypeScriptSyntaxKind.CallSignature).FirstOrDefault() is CallSignatureDeclaration callback)
-            {
-                BuildAction(callback);
-            }
+            Root = root;
         }
+        else
+        {
+            Root = BuildInternal(typeName);
 
-        return _dependencies;
+            _cache.TryAdd(typeName, Root);
+
+            _found.Clear();
+            _processing.Clear();
+        }
     }
 
     public DependencyMapBuilder WithReader(TypeDeclarationReader reader)
@@ -54,8 +39,10 @@ internal class DependencyMapBuilder()
         return this;
     }
 
-    private static string FormatTypeName(string typeName)
+    private static string FormatName(string typeName)
     {
+        // TODO: Probably we should get the arrays removing the formatting from the name, same for the generic types
+
         var nonGenericMethodReturnType = typeName.ExtractGenericType();
         return nonGenericMethodReturnType.Replace("[]", "");
     }
@@ -65,45 +52,112 @@ internal class DependencyMapBuilder()
         return node.GetText().ToString().Trim();
     }
 
-    private void BuildAction(CallSignatureDeclaration callback)
+    private Dependency BuildInternal(string typeName)
     {
-        var parameterTypes = callback.Parameters.OfKind(TypeScriptSyntaxKind.TypeReference);
-        foreach (var type in parameterTypes.Cast<TypeReferenceNode>())
-        {
-            Build(GetNodeText(type));
-        }
+        typeName = FormatName(typeName);
+        if (_found.Contains(typeName)) return default;
 
-        var returnTypes = callback.OfKind(TypeScriptSyntaxKind.TypeReference);
-        foreach (var type in returnTypes)
-        {
-            Build(GetNodeText(type));
-        }
-    }
+        // FIXME: For now avoid parsing EventMaps
+        if (typeName.EndsWith("EventMap")) return default;
 
-    private void BuildMethod(MethodSignature method)
-    {
-        foreach (var parameter in method.Parameters)
+        if (!TryGetDeclaration(typeName, out var declaration)) return default;
+        var dependency = new Dependency(typeName, declaration, []);
+
+        _found.Add(typeName);
+        _processing.Enqueue(declaration);
+
+        while (_processing.Count > 0)
         {
-            var parameterTypes = parameter.OfKind(TypeScriptSyntaxKind.TypeReference);
-            foreach (var type in parameterTypes.Cast<TypeReferenceNode>())
+            var node = _processing.Dequeue();
+
+            // Check if has methods
+            var methods = node.OfKind(TypeScriptSyntaxKind.MethodSignature);
+            foreach (var method in methods.Cast<MethodSignature>())
             {
-                Build(GetNodeText(type));
+                IEnumerable<Node> types;
+
+                foreach (var parameter in method.Parameters)
+                {
+                    types = parameter.OfKind(TypeScriptSyntaxKind.TypeReference);
+                    foreach (var type in types)
+                    {
+                        Resolve(dependency, type);
+                    }
+                }
+
+                types = method.OfKind(TypeScriptSyntaxKind.TypeReference);
+                foreach (var type in types)
+                {
+                    Resolve(dependency, type);
+                }
+            }
+
+            // Check if has properties
+            var properties = node.OfKind(TypeScriptSyntaxKind.PropertySignature);
+            foreach (var property in properties)
+            {
+                var types = property.OfKind(TypeScriptSyntaxKind.TypeReference);
+                foreach (var type in types)
+                {
+                    Resolve(dependency, type);
+                }
+            }
+
+            // Check if is a callback type
+            if (node.OfKind(TypeScriptSyntaxKind.CallSignature).FirstOrDefault() is CallSignatureDeclaration callback)
+            {
+                IEnumerable<Node> types;
+
+                foreach (var parameter in callback.Parameters)
+                {
+                    types = parameter.OfKind(TypeScriptSyntaxKind.TypeReference);
+                    foreach (var type in types)
+                    {
+                        Resolve(dependency, type);
+                    }
+                }
+
+                types = callback.OfKind(TypeScriptSyntaxKind.TypeReference);
+                foreach (var type in types)
+                {
+                    Resolve(dependency, type);
+                }
+            }
+
+            // Check if it is a union type
+            if (node.OfKind(TypeScriptSyntaxKind.UnionType).FirstOrDefault() is UnionTypeNode union)
+            {
+                foreach (var type in union.Types.Where(type => type is TypeReferenceNode))
+                {
+                    Resolve(dependency, type);
+                }
+            }
+
+            // Check if it is a intersection type
+            if (node.OfKind(TypeScriptSyntaxKind.UnionType).FirstOrDefault() is IntersectionTypeNode intersection)
+            {
+                foreach (var type in intersection.Types.Where(type => type is TypeReferenceNode))
+                {
+                    Resolve(dependency, type);
+                }
+            }
+
+            // Check if it is an array type
+            if (node.OfKind(TypeScriptSyntaxKind.ArrayType).FirstOrDefault() is ArrayTypeNode array)
+            {
+                Resolve(dependency, array.ElementType);
             }
         }
 
-        var returnTypes = method.OfKind(TypeScriptSyntaxKind.TypeReference);
-        foreach (var type in returnTypes)
-        {
-            Build(GetNodeText(type));
-        }
+        return dependency;
     }
 
-    private void BuildProperty(Node property)
+    private void Resolve(Dependency parent, INode type)
     {
-        var propertyTypes = property.OfKind(TypeScriptSyntaxKind.TypeReference);
-        foreach (var type in propertyTypes)
+        var children = BuildInternal(GetNodeText(type));
+        if (children != default)
         {
-            Build(GetNodeText(type));
+            parent.Dependencies.Add(children);
         }
     }
 
@@ -128,5 +182,32 @@ internal class DependencyMapBuilder()
         }
 
         return false;
+    }
+}
+
+public readonly record struct Dependency(
+    string Identifier,
+    DeclarationStatement Declaration,
+    ICollection<Dependency> Dependencies);
+
+public static class DependencyExtensions
+{
+    public static Dictionary<string, DeclarationStatement> ToDictionary(this Dependency root)
+    {
+        var result = new Dictionary<string, DeclarationStatement>();
+        FlattenDependencies(root, result);
+        return result;
+    }
+
+    private static void FlattenDependencies(Dependency dependency, Dictionary<string, DeclarationStatement> dictionary)
+    {
+        if (dictionary.ContainsKey(dependency.Identifier)) return;
+
+        dictionary[dependency.Identifier] = dependency.Declaration;
+
+        foreach (var dep in dependency.Dependencies)
+        {
+            FlattenDependencies(dep, dictionary);
+        }
     }
 }
