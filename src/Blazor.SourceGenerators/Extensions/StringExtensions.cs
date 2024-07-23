@@ -9,7 +9,7 @@ internal static class StringExtensions
 {
     public static CharacterCode CharCodeAt(this string str, int pos) => (CharacterCode)str[pos];
 
-    public static string CleanseType(this string str)
+    public static string FormatTypeName(this string str)
     {
         // TODO: Probably we should get the arrays removing the formatting from the name, same for the generic types
 

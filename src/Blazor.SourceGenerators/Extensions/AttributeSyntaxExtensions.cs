@@ -7,9 +7,7 @@ namespace Blazor.SourceGenerators.Extensions;
 
 internal static class AttributeSyntaxExtensions
 {
-    internal static GeneratorOptions GetGeneratorOptions(
-        this AttributeSyntax attribute,
-        bool supportsGenerics)
+    internal static GeneratorOptions GetGeneratorOptions(this AttributeSyntax attribute, bool supportsGenerics)
     {
         GeneratorOptions options = new(supportsGenerics);
         if (attribute is { ArgumentList: not null })

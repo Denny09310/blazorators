@@ -72,23 +72,6 @@ internal static class CSharpMethodExtensions
         }
     }
 
-    internal static bool IsGenericParameter(string methodName, CSharpType parameter, GeneratorOptions options) =>
-        Array.Exists(options.GenericMethodDescriptors ?? [], descriptor =>
-        {
-            if (!descriptor.StartsWith(methodName))
-            {
-                return false;
-            }
-
-            if (descriptor.Contains(":"))
-            {
-                var nameParamPair = descriptor.Split(':');
-                return nameParamPair[1].StartsWith(parameter.RawName);
-            }
-
-            return false;
-        });
-
     internal static bool IsGenericReturnType(this CSharpMethod method, GeneratorOptions options) =>
         Array.Exists(options.GenericMethodDescriptors ?? [], descriptor =>
         {

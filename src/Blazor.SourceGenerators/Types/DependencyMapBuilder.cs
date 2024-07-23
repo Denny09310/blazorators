@@ -41,7 +41,7 @@ internal class TypeMapperBuilder()
 
     private TypeDescriptor BuildInternal(string typeName)
     {
-        typeName = typeName.CleanseType();
+        typeName = typeName.FormatTypeName();
         if (_found.Contains(typeName)) return default;
 
         // FIXME: For now avoid parsing all event related members
