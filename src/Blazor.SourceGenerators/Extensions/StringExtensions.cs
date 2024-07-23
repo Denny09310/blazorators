@@ -9,6 +9,17 @@ internal static class StringExtensions
 {
     public static CharacterCode CharCodeAt(this string str, int pos) => (CharacterCode)str[pos];
 
+    public static string FormatLiteral(this string str)
+    {
+        if(string.IsNullOrEmpty(str)) return str;
+
+        var parts = Regex.Split(str, "-")
+            .Where(part => !string.IsNullOrEmpty(part))
+            .Select(part => char.ToUpperInvariant(part[0]) + part.Substring(1).ToLowerInvariant());
+
+        return string.Concat(parts);
+    }
+
     public static string FormatTypeName(this string str)
     {
         // TODO: Probably we should get the arrays removing the formatting from the name, same for the generic types

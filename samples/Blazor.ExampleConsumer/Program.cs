@@ -20,6 +20,7 @@ builder.Services.AddSessionStorageServices();
 builder.Services.AddGeolocationServices();
 builder.Services.AddSpeechSynthesisServices();
 builder.Services.AddClipboardServices();
+builder.Services.AddPermissionsServices();
 
 // Custom library bits...
 builder.Services.AddSpeechRecognitionServices();

@@ -124,6 +124,11 @@ internal sealed partial class TypeDeclarationParser
                 {
                     csharpObject.DependentTypes.Add(typeName, ToObject(typeDescriptor));
                 }
+                else if (type is LiteralTypeNode)
+                {
+                    typeName = typeName.Replace("\"", "");
+                    csharpObject.EnumValues.Add(typeName, new CSharpEnum(typeName.FormatLiteral(), typeName));
+                }
             }
         }
 
@@ -200,16 +205,15 @@ internal sealed partial class TypeDeclarationParser
         foreach (var parameter in methodParameters)
         {
             var parameterName = parameter.Identifier;
-            var parameterTypeNode = parameter.Children[parameter.Children.Count - 1];
 
             // TODO: Handle other type of nodes correctly
             // Examples:
             // -    Rsponse | URL #UnionNodeTypeNode
             // -    ((this: SomeCustom, ev: Event) => any)  #ParenthesizedTypeNode, inside #FunctionTypeNode
 
-            var parameterType = parameterTypeNode switch
+            var parameterType = parameter.Last switch
             {
-                _ => parameterTypeNode.GetNodeText()
+                _ => parameter.Last.GetNodeText()
             };
 
             var isNullable = parameter.QuestionToken is not null || IsNullableType(parameterType);
@@ -230,7 +234,7 @@ internal sealed partial class TypeDeclarationParser
                 {
                     javascriptMethod = javascriptMethod with
                     {
-                        InvokableMethodName = $"blazorators.{dependency.Identifier.LowerCaseFirstLetter()}.{methodName}"
+                        InvokableMethodName = $"blazorators.{descriptor.Identifier.LowerCaseFirstLetter()}.{methodName}"
                     };
 
                     if (parameterName.EndsWith("Callback"))
@@ -257,16 +261,14 @@ internal sealed partial class TypeDeclarationParser
         {
             var propertyName = property.Identifier;
 
-            var propertyTypeNode = property.Children[property.Children.Count - 1];
-
             // TODO: Handle other type of nodes correctly
             // Examples:
             // -    SomeCustomType | null                   #UnionNodeType
             // -    ((this: SomeCustom, ev: Event) => any)  #ParenthesizedTypeNode, inside #FunctionTypeNode
 
-            var propertyType = propertyTypeNode switch
+            var propertyType = property.Last switch
             {
-                _ => propertyTypeNode.GetNodeText()
+                _ => property.Last.GetNodeText()
             };
 
             if (propertyName is null || string.IsNullOrEmpty(propertyType))

@@ -21,6 +21,7 @@
         <ProjectReference Include="..\..\src\Blazor.SessionStorage.WebAssembly\Blazor.SessionStorage.WebAssembly.csproj" />
         <ProjectReference Include="..\..\src\Blazor.SpeechRecognition.WebAssembly\Blazor.SpeechRecognition.WebAssembly.csproj" />
         <ProjectReference Include="..\..\src\Blazor.SpeechSynthesis.WebAssembly\Blazor.SpeechSynthesis.WebAssembly.csproj" />
+        <ProjectReference Include="..\..\src\Blazor.Permissions.WebAssembly\Blazor.Permissions.WebAssembly.csproj" />
     </ItemGroup>
 
 </Project>

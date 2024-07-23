@@ -16,10 +16,10 @@ internal record CSharpObject(
     public Dictionary<string, CSharpObject> DependentTypes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     public IImmutableSet<DependentType> AllDependentTypes => this.GetAllDependencies()
-                .Concat(Properties.SelectMany(p => p.Value.AllDependentTypes))
-                .Concat(Methods.SelectMany(p => p.Value.AllDependentTypes))
-                .Concat([new DependentType(TypeName, this)])
-                .ToImmutableHashSet(DependentTypeComparer.Default);
+        .Concat(Properties.SelectMany(p => p.Value.AllDependentTypes))
+        .Concat(Methods.SelectMany(p => p.Value.AllDependentTypes))
+        .Concat([new DependentType(TypeName, this)])
+        .ToImmutableHashSet(DependentTypeComparer.Default);
 
     /// <summary>
     /// The <see cref="Dictionary{TKey, TValue}.Keys"/> represent the raw parsed member name, while the
@@ -32,6 +32,8 @@ internal record CSharpObject(
     /// corresponding <see cref="Dictionary{TKey, TValue}.Values"/> are the <see cref="CSharpMethod"/> details.
     /// </summary>
     public Dictionary<string, CSharpMethod> Methods { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public Dictionary<string, CSharpEnum> EnumValues { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     public bool IsActionParameter =>
         TypeName.EndsWith("Callback");
@@ -48,6 +50,43 @@ internal record CSharpObject(
         builder.Append($"/// </summary>\r\n");
         builder.Append($"public class {TypeName}\r\n{{\r\n");
 
+        if (EnumValues.Count > 0)
+        {
+            BuildConstants(builder);
+        }
+        else
+        {
+            BuildProperties(builder);
+        }
+
+        builder.Append("}\r\n");
+        var result = builder.ToString();
+        return result;
+    }
+
+    private void BuildConstants(StringBuilder builder)
+    {
+        foreach (var enumValue in EnumValues)
+        {
+            var (memberName, member) = (enumValue.Key, enumValue.Value);
+
+            builder.Append($"    /// <summary>\r\n");
+            builder.Append($"    /// Source-generated property representing the <c>{TypeName}.{memberName}</c> value.\r\n");
+            builder.Append($"    /// </summary>\r\n");
+            builder.Append($"    public const string {member.ValueName} = \"{member.RawValue}\";\r\n");  
+            builder.Append($"    \r\n");  
+        }
+
+        builder.Append($"    [JsonConstructor]\r\n");
+        builder.Append($"    public {TypeName}(string value) => Value = value;\r\n\r\n");
+
+        builder.Append($"    public string Value {{ get; set; }}\r\n\r\n");
+
+        builder.Append($"    public static implicit operator string({TypeName} @enum) => @enum.Value;\r\n");
+    }
+
+    private void BuildProperties(StringBuilder builder)
+    {
         foreach (var (index, property) in Properties.Select((property, index) => (index, property)))
         {
             var (memberName, member) = (property.Key, property.Value);
@@ -85,9 +124,5 @@ internal record CSharpObject(
                 builder.Append($"    public DateTime{nullable} {csharpMemberName}AsUtcDateTime => {csharpMemberName}.ToDateTimeFromUnix();\r\n");
             }
         }
-
-        builder.Append("}\r\n");
-        var result = builder.ToString();
-        return result;
     }
 }
