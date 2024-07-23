@@ -81,7 +81,7 @@ public class LibDomParserInterfacesTests
 
     [Theory]
     [InlineData("Geolocation", 6)]
-    [InlineData("Clipboard", 1)] // For now there are 0 dependencies as we don't search the type aliases
+    [InlineData("Clipboard", 2)] // For now there are 0 dependencies as we don't search the type aliases
     public void CorrectlyConvertsTypeScriptInterfaceToCSharpExtensionObject(string typeName, int dependencies)
     {
         var sut = TypeDeclarationParser.Default;

@@ -18,8 +18,7 @@ internal sealed partial record CSharpTopLevelObject(string RawTypeName) : ICShar
     /// <summary>
     /// Gets all dependent types for this top-level object, including properties and methods.
     /// </summary>
-    public IImmutableSet<DependentType> AllDependentTypes => DependentTypes
-        .Select(kvp => new DependentType(kvp.Key, kvp.Value))
+    public IImmutableSet<DependentType> AllDependentTypes => this.GetAllDependencies()
         .Concat(Methods.SelectMany(method => method.AllDependentTypes))
         .Concat(Properties.SelectMany(method => method.AllDependentTypes))
         .ToImmutableHashSet(DependentTypeComparer.Default);
