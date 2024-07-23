@@ -13,52 +13,40 @@ public class TypeMapperTests
     [Fact]
     public void TypeMapperCorrectlyMapsKnownTypeMap()
     {
-        Dictionary<string, DeclarationStatement> GetTypeMap(bool timePenalty)
+        static Dictionary<string, DeclarationStatement> GetTypeMapWithPotential(bool timePenalty)
         {
+            var mapper = new DependencyMapBuilder();
+
             var startingTimestamp = Stopwatch.GetTimestamp();
-            var sut = new DependencyMapBuilder().Build;
+            var sut = mapper.Build;
 
-            var typeMap = sut("Geolocation");
+            // The implementation: window.navigator.geolocation
+            sut("Geolocation");
+            var typeMap = mapper.Root;
 
-            Assert.NotEmpty(typeMap);
-            var elapsedMilliseconds = GetElapsedMilliseconds(startingTimestamp);
+            Assert.NotEqual(default, typeMap);
+            var elapsedTimestamp = Stopwatch.GetElapsedTime(startingTimestamp);
 
-            if (timePenalty)
-            {
-                Assert.True(
-                    elapsedMilliseconds < 1_000,
-                    $"Expected operation to complete in under 1,000ms, but took {elapsedMilliseconds}ms.");
-            }
+            // This needs to take less than a second.
+            // But only fail the test if there is a time penalty.
+            Assert.True(
+                condition: !timePenalty ||
+                elapsedTimestamp.TotalMilliseconds < 1_000, $"""
+                condition: timePenalty is {!timePenalty}
+                or took longer than 1,000ms {elapsedTimestamp.TotalMilliseconds < 1_000}.
+                """);
 
-            return typeMap;
+            return typeMap.ToDictionary();
         }
 
-        double GetElapsedMilliseconds(long startingTimestamp)
-        {
-            var endingTimestamp = Stopwatch.GetTimestamp();
-            return (endingTimestamp - startingTimestamp) / (double)Stopwatch.Frequency * 1_000;
-        }
+        var typeMap = GetTypeMapWithPotential(timePenalty: false);
 
-        void ValidateTypeMap(Dictionary<string, DeclarationStatement> typeMap)
-        {
-            IEnumerable<string> expectedTypes =
-            [
-                "Geolocation",
-                "PositionCallback",
-                "PositionErrorCallback",
-                "PositionOptions",
-                "GeolocationPosition",
-                "GeolocationPositionError",
-                "GeolocationCoordinates"
-            ];
-
-            foreach (var type in expectedTypes)
-            {
-                Assert.True(typeMap.ContainsKey(type), $"Type '{type}' was not found in the type map.");
-            }
-        }
-
-        var typeMap = GetTypeMap(timePenalty: false);
-        ValidateTypeMap(typeMap);
+        Assert.NotNull(typeMap["Geolocation"]);
+        Assert.NotNull(typeMap["PositionCallback"]);
+        Assert.NotNull(typeMap["PositionErrorCallback"]);
+        Assert.NotNull(typeMap["PositionOptions"]);
+        Assert.NotNull(typeMap["GeolocationPosition"]);
+        Assert.NotNull(typeMap["GeolocationPositionError"]);
+        Assert.NotNull(typeMap["GeolocationCoordinates"]);
     }
 }

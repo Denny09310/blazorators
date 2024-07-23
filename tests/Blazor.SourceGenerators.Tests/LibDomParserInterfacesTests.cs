@@ -76,12 +76,12 @@ public class LibDomParserInterfacesTests
 
         // As of right now the MediaKeysRequirement is not parsed.
         // It's a type alias, not an interface.
-        Assert.Single(actual.DependentTypes);
+        Assert.Equal(2, actual.DependentTypes.Count);
     }
 
     [Theory]
-    [InlineData("Geolocation", 4)]
-    [InlineData("Clipboard", 0)] // For now there are 0 dependencies as we don't search the type aliases
+    [InlineData("Geolocation", 6)]
+    [InlineData("Clipboard", 1)] // For now there are 0 dependencies as we don't search the type aliases
     public void CorrectlyConvertsTypeScriptInterfaceToCSharpExtensionObject(string typeName, int dependencies)
     {
         var sut = TypeDeclarationParser.Default;
