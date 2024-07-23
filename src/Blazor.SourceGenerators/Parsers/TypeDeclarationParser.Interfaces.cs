@@ -7,22 +7,80 @@ namespace Blazor.SourceGenerators.Parsers;
 
 internal sealed partial class TypeDeclarationParser
 {
-    internal static CSharpObject ToObject(Dependency root)
+    internal static CSharpObject ToObject(TypeDescriptor descriptor)
+    {
+        var (identifier, declaration, _) = descriptor;
+
+        return declaration switch
+        {
+            TypeAliasDeclaration => FromTypeAlias(descriptor),
+            InterfaceDeclaration => FromInterface(descriptor),
+            _ => throw new NotImplementedException($"Invalid type declaration '{declaration.GetType().Name}' for '{identifier}'"),
+        };
+    }
+
+    internal static CSharpTopLevelObject ToTopLevelObject(TypeDescriptor root)
     {
         var (identifier, declaration, dependencies) = root;
+        var csharpTopLevelObject = new CSharpTopLevelObject(identifier);
 
-        var heritage = declaration is InterfaceDeclaration @interface ? @interface.HeritageClauses?
+        var topLevelObjectMethods = declaration.OfKind(TypeScriptSyntaxKind.MethodSignature);
+        var methods = ParseMethods(root, topLevelObjectMethods);
+
+        csharpTopLevelObject.Methods.AddRange(methods);
+
+        var topLevelObjectProperties = declaration.OfKind(TypeScriptSyntaxKind.PropertySignature);
+        var properties = ParseProperties(topLevelObjectProperties);
+
+        csharpTopLevelObject.Properties.AddRange(properties);
+
+        foreach (var dependency in dependencies)
+        {
+            csharpTopLevelObject.DependentTypes.Add(dependency.Identifier, ToObject(dependency));
+        }
+
+        return csharpTopLevelObject;
+    }
+
+    internal CSharpObject ToObject(string typeName)
+    {
+        var descriptor = _mapper.Build(typeName);
+
+        if (descriptor != default) return ToObject(descriptor);
+        return default!;
+    }
+
+    internal CSharpTopLevelObject ToTopLevelObject(string typeName)
+    {
+        var descriptor = _mapper.Build(typeName);
+
+        if (descriptor != default) return ToTopLevelObject(descriptor);
+        return default!;
+    }
+
+    private static string CleanseType(string type)
+    {
+        return type
+            .Replace(" | null", "")
+            .Replace(" | undefined", "");
+    }
+
+    private static CSharpObject FromInterface(TypeDescriptor descriptor)
+    {
+        var (identifier, declaration, dependencies) = descriptor;
+
+        var heritage = ((InterfaceDeclaration)declaration).HeritageClauses?
                 .SelectMany(heritage => heritage.Types)
                 .Where(type => type.Identifier is not "EventTarget")
                 .Select(type => type.Identifier)
-                .ToArray() : null;
+                .ToArray();
 
         var subclass = heritage is null || heritage.Length == 0 ? "" : string.Join(", ", heritage);
 
         var csharpObject = new CSharpObject(identifier, subclass);
 
         var objectMethods = declaration.OfKind(TypeScriptSyntaxKind.MethodSignature);
-        var methods = ParseMethods(root, objectMethods);
+        var methods = ParseMethods(descriptor, objectMethods);
 
         csharpObject = csharpObject with
         {
@@ -49,54 +107,52 @@ internal sealed partial class TypeDeclarationParser
         return csharpObject;
     }
 
-    internal static CSharpTopLevelObject ToTopLevelObject(Dependency root)
+    private static CSharpObject FromTypeAlias(TypeDescriptor descriptor)
     {
-        var (identifier, declaration, dependencies) = root;
-        var csharpTopLevelObject = new CSharpTopLevelObject(identifier);
+        var (identifier, declaration, dependencies) = descriptor;
 
-        var topLevelObjectMethods = declaration.OfKind(TypeScriptSyntaxKind.MethodSignature);
-        var methods = ParseMethods(root, topLevelObjectMethods);
+        var csharpObject = new CSharpObject(identifier, null);
 
-        csharpTopLevelObject.Methods.AddRange(methods);
-
-        var topLevelObjectProperties = declaration.OfKind(TypeScriptSyntaxKind.PropertySignature);
-        var properties = ParseProperties(topLevelObjectProperties);
-
-        csharpTopLevelObject.Properties.AddRange(properties);
-
-        foreach (var dependency in dependencies)
+        if (declaration.OfKind(TypeScriptSyntaxKind.UnionType).FirstOrDefault() is UnionTypeNode union)
         {
-            csharpTopLevelObject.DependentTypes.Add(dependency.Identifier, ToObject(dependency));
+            foreach (var type in union.Types)
+            {
+                var typeName = type.GetNodeText();
+                var typeDescriptor = dependencies.FirstOrDefault(type => type.Identifier == typeName);
+
+                if (typeDescriptor != default)
+                {
+                    csharpObject.DependentTypes.Add(typeName, ToObject(typeDescriptor));
+                }
+            }
         }
 
-        return csharpTopLevelObject;
-    }
+        if (declaration.OfKind(TypeScriptSyntaxKind.IntersectionType).FirstOrDefault() is IntersectionTypeNode intersection)
+        {
+            foreach (var type in intersection.Types)
+            {
+                var typeName = type.GetNodeText();
+                var typeDescriptor = dependencies.FirstOrDefault(type => type.Identifier == typeName);
 
-    internal CSharpObject ToObject(string typeName)
-    {
-        _mapper.Build(typeName);
-        if (_mapper.Root != default) return ToObject(_mapper.Root);
-        return default!;
-    }
+                if (typeDescriptor != default)
+                {
+                    csharpObject.DependentTypes.Add(typeName, ToObject(typeDescriptor));
+                }
+            }
+        }
 
-    internal CSharpTopLevelObject ToTopLevelObject(string typeName)
-    {
-        _mapper.Build(typeName);
+        if (declaration.OfKind(TypeScriptSyntaxKind.ArrayType).FirstOrDefault() is ArrayTypeNode array)
+        {
+            var typeName = array.ElementType.GetNodeText();
+            var typeDescriptor = dependencies.FirstOrDefault(type => type.Identifier == typeName);
 
-        if (_mapper.Root != default) return ToTopLevelObject(_mapper.Root);
-        return default!;
-    }
+            if (typeDescriptor != default)
+            {
+                csharpObject.DependentTypes.Add(typeName, ToObject(typeDescriptor));
+            }
+        }
 
-    private static string CleanseType(string type)
-    {
-        return type
-            .Replace(" | null", "")
-            .Replace(" | undefined", "");
-    }
-
-    private static string GetNodeText(INode node)
-    {
-        return node.GetText().ToString().Trim();
+        return csharpObject;
     }
 
     private static bool IsNullableType(string type)
@@ -104,14 +160,14 @@ internal sealed partial class TypeDeclarationParser
         return type.EndsWith(" | null") || type.EndsWith(" | undefined");
     }
 
-    private static IEnumerable<CSharpMethod> ParseMethods(Dependency root, IEnumerable<Node> objectMethods)
+    private static IEnumerable<CSharpMethod> ParseMethods(TypeDescriptor descriptor, IEnumerable<Node> objectMethods)
     {
         ICollection<CSharpMethod> methods = [];
         foreach (var method in objectMethods.Cast<MethodSignature>())
         {
             var methodName = method.Identifier;
             var methodParameters = method.Parameters;
-            var methodReturnType = GetNodeText(method.Type);
+            var methodReturnType = method.Type.GetNodeText();
 
             if (methodName is null || methodParameters is null || string.IsNullOrEmpty(methodReturnType))
             {
@@ -125,7 +181,7 @@ internal sealed partial class TypeDeclarationParser
             }
 
             var (csharpParameters, javascriptMethod) = ParseParameters(
-                root,
+                descriptor,
                 methodName,
                 methodParameters);
 
@@ -136,7 +192,7 @@ internal sealed partial class TypeDeclarationParser
         return methods;
     }
 
-    private static (IList<CSharpType>, JavaScriptMethod) ParseParameters(Dependency root, string methodName, NodeArray<ParameterDeclaration> methodParameters)
+    private static (IList<CSharpType>, JavaScriptMethod) ParseParameters(TypeDescriptor descriptor, string methodName, NodeArray<ParameterDeclaration> methodParameters)
     {
         IList<CSharpType> parameters = [];
         var javascriptMethod = new JavaScriptMethod(methodName);
@@ -153,7 +209,7 @@ internal sealed partial class TypeDeclarationParser
 
             var parameterType = parameterTypeNode switch
             {
-                _ => GetNodeText(parameterTypeNode)
+                _ => parameterTypeNode.GetNodeText()
             };
 
             var isNullable = parameter.QuestionToken is not null || IsNullableType(parameterType);
@@ -169,7 +225,7 @@ internal sealed partial class TypeDeclarationParser
             // and source generated. This is so that dependent types are known and resolved.
             if (!Primitives.IsPrimitiveType(parameterType))
             {
-                var dependency = root.Dependencies.FirstOrDefault(dependency => dependency.Identifier == parameterType);
+                var dependency = descriptor.Dependencies.FirstOrDefault(dependency => dependency.Identifier == parameterType);
                 if (dependency != default)
                 {
                     javascriptMethod = javascriptMethod with
@@ -210,7 +266,7 @@ internal sealed partial class TypeDeclarationParser
 
             var propertyType = propertyTypeNode switch
             {
-                _ => GetNodeText(propertyTypeNode)
+                _ => propertyTypeNode.GetNodeText()
             };
 
             if (propertyName is null || string.IsNullOrEmpty(propertyType))
@@ -239,9 +295,9 @@ internal sealed partial class TypeDeclarationParser
         return properties;
     }
 
-    private static CSharpAction ToAction(Dependency root)
+    private static CSharpAction ToAction(TypeDescriptor descriptor)
     {
-        var (identifier, declaration, dependencies) = root;
+        var (identifier, declaration, dependencies) = descriptor;
         var csharpAction = new CSharpAction(identifier);
 
         var callSignatureDeclaration = declaration.OfKind(TypeScriptSyntaxKind.CallSignature).FirstOrDefault() as CallSignatureDeclaration;
@@ -249,7 +305,7 @@ internal sealed partial class TypeDeclarationParser
         if (callSignatureDeclaration is not null)
         {
             var actionParameters = callSignatureDeclaration.Parameters;
-            var actionReturnType = GetNodeText(callSignatureDeclaration.Type);
+            var actionReturnType = callSignatureDeclaration.Type.GetNodeText();
 
             if (actionParameters is null || string.IsNullOrEmpty(actionReturnType))
             {
@@ -257,7 +313,7 @@ internal sealed partial class TypeDeclarationParser
             }
 
             var (csharpParameters, _) = ParseParameters(
-                root,
+                descriptor,
                 csharpAction.RawName,
                 actionParameters);
 

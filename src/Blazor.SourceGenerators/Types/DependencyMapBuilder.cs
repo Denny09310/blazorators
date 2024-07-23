@@ -5,63 +5,50 @@ using Blazor.SourceGenerators.TypeScript.Types;
 
 namespace Blazor.SourceGenerators.Types;
 
-internal class DependencyMapBuilder()
+internal class TypeMapperBuilder()
 {
-    private static readonly ConcurrentDictionary<string, Dependency> _cache = [];
+    private static readonly ConcurrentDictionary<string, TypeDescriptor> _cache = [];
 
     private readonly HashSet<string> _found = [];
     private readonly Queue<Node> _processing = [];
 
     private TypeDeclarationReader _reader = TypeDeclarationReader.Default;
 
-    public Dependency Root { get; private set; }
-
-    public void Build(string typeName)
+    public TypeDescriptor Build(string typeName)
     {
-        if (_cache.TryGetValue(typeName, out var root))
+        if (_cache.TryGetValue(typeName, out var descriptor))
         {
-            Root = root;
+            return descriptor;
         }
-        else
+
+        descriptor = BuildInternal(typeName);
+        if (descriptor != default)
         {
-            Root = BuildInternal(typeName);
-
-            _cache.TryAdd(typeName, Root);
-
-            _found.Clear();
-            _processing.Clear();
+            _cache.TryAdd(typeName, descriptor);
         }
+
+        _found.Clear();
+        _processing.Clear();
+
+        return descriptor;
     }
 
-    public DependencyMapBuilder WithReader(TypeDeclarationReader reader)
+    public TypeMapperBuilder WithReader(TypeDeclarationReader reader)
     {
         _reader = reader;
         return this;
     }
 
-    private static string FormatName(string typeName)
+    private TypeDescriptor BuildInternal(string typeName)
     {
-        // TODO: Probably we should get the arrays removing the formatting from the name, same for the generic types
-
-        var nonGenericMethodReturnType = typeName.ExtractGenericType();
-        return nonGenericMethodReturnType.Replace("[]", "");
-    }
-
-    private static string GetNodeText(INode node)
-    {
-        return node.GetText().ToString().Trim();
-    }
-
-    private Dependency BuildInternal(string typeName)
-    {
-        typeName = FormatName(typeName);
+        typeName = typeName.CleanseType();
         if (_found.Contains(typeName)) return default;
 
-        // FIXME: For now avoid parsing EventMaps
-        if (typeName.EndsWith("EventMap")) return default;
+        // FIXME: For now avoid parsing all event related members
+        if (typeName.Contains("Event")) return default;
 
         if (!TryGetDeclaration(typeName, out var declaration)) return default;
-        var dependency = new Dependency(typeName, declaration, []);
+        var descriptor = new TypeDescriptor(typeName, declaration, []);
 
         _found.Add(typeName);
         _processing.Enqueue(declaration);
@@ -81,14 +68,14 @@ internal class DependencyMapBuilder()
                     types = parameter.OfKind(TypeScriptSyntaxKind.TypeReference);
                     foreach (var type in types)
                     {
-                        Resolve(dependency, type);
+                        Resolve(descriptor, type);
                     }
                 }
 
                 types = method.OfKind(TypeScriptSyntaxKind.TypeReference);
                 foreach (var type in types)
                 {
-                    Resolve(dependency, type);
+                    Resolve(descriptor, type);
                 }
             }
 
@@ -99,7 +86,7 @@ internal class DependencyMapBuilder()
                 var types = property.OfKind(TypeScriptSyntaxKind.TypeReference);
                 foreach (var type in types)
                 {
-                    Resolve(dependency, type);
+                    Resolve(descriptor, type);
                 }
             }
 
@@ -113,14 +100,14 @@ internal class DependencyMapBuilder()
                     types = parameter.OfKind(TypeScriptSyntaxKind.TypeReference);
                     foreach (var type in types)
                     {
-                        Resolve(dependency, type);
+                        Resolve(descriptor, type);
                     }
                 }
 
                 types = callback.OfKind(TypeScriptSyntaxKind.TypeReference);
                 foreach (var type in types)
                 {
-                    Resolve(dependency, type);
+                    Resolve(descriptor, type);
                 }
             }
 
@@ -129,7 +116,7 @@ internal class DependencyMapBuilder()
             {
                 foreach (var type in union.Types.Where(type => type is TypeReferenceNode))
                 {
-                    Resolve(dependency, type);
+                    Resolve(descriptor, type);
                 }
             }
 
@@ -138,26 +125,26 @@ internal class DependencyMapBuilder()
             {
                 foreach (var type in intersection.Types.Where(type => type is TypeReferenceNode))
                 {
-                    Resolve(dependency, type);
+                    Resolve(descriptor, type);
                 }
             }
 
             // Check if it is an array type
             if (node.OfKind(TypeScriptSyntaxKind.ArrayType).FirstOrDefault() is ArrayTypeNode array)
             {
-                Resolve(dependency, array.ElementType);
+                Resolve(descriptor, array.ElementType);
             }
         }
 
-        return dependency;
+        return descriptor;
     }
 
-    private void Resolve(Dependency parent, INode type)
+    private void Resolve(TypeDescriptor descriptor, INode type)
     {
-        var children = BuildInternal(GetNodeText(type));
+        var children = BuildInternal(type.GetNodeText());
         if (children != default)
         {
-            parent.Dependencies.Add(children);
+            descriptor.Dependencies.Add(children);
         }
     }
 
@@ -185,21 +172,21 @@ internal class DependencyMapBuilder()
     }
 }
 
-public readonly record struct Dependency(
+public readonly record struct TypeDescriptor(
     string Identifier,
     DeclarationStatement Declaration,
-    ICollection<Dependency> Dependencies);
+    ICollection<TypeDescriptor> Dependencies);
 
-public static class DependencyExtensions
+public static class TypDescriptorExtensions
 {
-    public static Dictionary<string, DeclarationStatement> ToDictionary(this Dependency root)
+    public static Dictionary<string, DeclarationStatement> ToDictionary(this TypeDescriptor root)
     {
         var result = new Dictionary<string, DeclarationStatement>();
         FlattenDependencies(root, result);
         return result;
     }
 
-    private static void FlattenDependencies(Dependency dependency, Dictionary<string, DeclarationStatement> dictionary)
+    private static void FlattenDependencies(TypeDescriptor dependency, Dictionary<string, DeclarationStatement> dictionary)
     {
         if (dictionary.ContainsKey(dependency.Identifier)) return;
 

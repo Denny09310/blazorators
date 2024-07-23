@@ -15,16 +15,15 @@ public class TypeMapperTests
     {
         static Dictionary<string, DeclarationStatement> GetTypeMapWithPotential(bool timePenalty)
         {
-            var mapper = new DependencyMapBuilder();
+            var mapper = new TypeMapperBuilder();
 
             var startingTimestamp = Stopwatch.GetTimestamp();
             var sut = mapper.Build;
 
             // The implementation: window.navigator.geolocation
-            sut("Geolocation");
-            var typeMap = mapper.Root;
+            var descriptor = sut("Geolocation");
 
-            Assert.NotEqual(default, typeMap);
+            Assert.NotEqual(default, descriptor);
             var elapsedTimestamp = Stopwatch.GetElapsedTime(startingTimestamp);
 
             // This needs to take less than a second.
@@ -36,7 +35,7 @@ public class TypeMapperTests
                 or took longer than 1,000ms {elapsedTimestamp.TotalMilliseconds < 1_000}.
                 """);
 
-            return typeMap.ToDictionary();
+            return descriptor.ToDictionary();
         }
 
         var typeMap = GetTypeMapWithPotential(timePenalty: false);

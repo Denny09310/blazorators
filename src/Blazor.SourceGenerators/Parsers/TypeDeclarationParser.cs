@@ -8,13 +8,13 @@ internal sealed partial class TypeDeclarationParser
     private static readonly Lazy<TypeDeclarationParser> _parser =
         new(valueFactory: () => new TypeDeclarationParser(TypeDeclarationReader.Default));
 
-    private readonly DependencyMapBuilder _mapper;
+    private readonly TypeMapperBuilder _mapper;
     private readonly TypeDeclarationReader _reader;
 
     internal TypeDeclarationParser(TypeDeclarationReader reader)
     {
         _reader = reader;
-        _mapper = new DependencyMapBuilder().WithReader(_reader);
+        _mapper = new TypeMapperBuilder().WithReader(_reader);
     }
 
     internal static TypeDeclarationParser Default => _parser.Value;
@@ -23,9 +23,9 @@ internal sealed partial class TypeDeclarationParser
     {
         ParserResult<CSharpTopLevelObject> result = new(ParserResultStatus.Unknown);
 
-        _mapper.Build(typeName);
+        var descriptor = _mapper.Build(typeName);
 
-        if (_mapper.Root == default) return result with
+        if (descriptor == default) return result with
         {
             Status = ParserResultStatus.TargetTypeNotFound
         };
@@ -35,7 +35,7 @@ internal sealed partial class TypeDeclarationParser
             result = result with
             {
                 Status = ParserResultStatus.SuccessfullyParsed,
-                Value = ToTopLevelObject(_mapper.Root)
+                Value = ToTopLevelObject(descriptor)
             };
         }
         catch (Exception ex)

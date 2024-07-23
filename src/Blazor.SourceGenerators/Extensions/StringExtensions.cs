@@ -7,8 +7,15 @@ namespace Blazor.SourceGenerators.Extensions;
 
 internal static class StringExtensions
 {
-    public static CharacterCode CharCodeAt(this string str, int pos) =>
-        (CharacterCode)str[pos];
+    public static CharacterCode CharCodeAt(this string str, int pos) => (CharacterCode)str[pos];
+
+    public static string CleanseType(this string str)
+    {
+        // TODO: Probably we should get the arrays removing the formatting from the name, same for the generic types
+
+        var nonGenericMethodReturnType = str.ExtractGenericType();
+        return nonGenericMethodReturnType.Replace("[]", "");
+    }
 
     public static string FromCharCode(params int[] codes)
     {
