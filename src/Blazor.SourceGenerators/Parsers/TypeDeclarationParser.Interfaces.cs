@@ -24,7 +24,7 @@ internal sealed partial class TypeDeclarationParser
         var typeName = declaration.Identifier;
 
         if (_cache.IsProcessed(typeName)) return _cache.ProcessedTypes[typeName];
-        if ( _cache.IsProcessing(typeName)) return default!;
+        if (_cache.IsProcessing(typeName)) return default!;
 
         CSharpObject csharpObject;
         using (_cache.Process(typeName))
@@ -162,7 +162,17 @@ internal sealed partial class TypeDeclarationParser
         foreach (var parameter in methodParameters)
         {
             var parameterName = parameter.Identifier;
-            var parameterType = GetNodeText(parameter.Children[parameter.Children.Count - 1]);
+            var parameterTypeNode = parameter.Children[parameter.Children.Count - 1];
+
+            // TODO: Handle other type of nodes correctly
+            // Examples:
+            // -    Rsponse | URL #UnionNodeTypeNode
+            // -    ((this: SomeCustom, ev: Event) => any)  #ParenthesizedTypeNode, inside #FunctionTypeNode
+
+            var parameterType = parameterTypeNode switch
+            {
+                _ => GetNodeText(parameterTypeNode)
+            };
 
             var isNullable = parameter.QuestionToken is not null || IsNullableType(parameterType);
 
@@ -225,17 +235,17 @@ internal sealed partial class TypeDeclarationParser
                 _ => GetNodeText(propertyTypeNode)
             };
 
+            if (propertyName is null || string.IsNullOrEmpty(propertyType))
+            {
+                continue;
+            }
+
             var isReadonly = property.Modifiers.Exists(modifier => modifier.Kind is TypeScriptSyntaxKind.ReadonlyKeyword);
             var isNullable = property.QuestionToken is not null || IsNullableType(propertyType);
 
             if (isNullable)
             {
                 propertyType = CleanseType(propertyType);
-            }
-
-            if (propertyName is null || string.IsNullOrEmpty(propertyType))
-            {
-                continue;
             }
 
             // FIXME: For now ignore all properties that starts with "on"
