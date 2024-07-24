@@ -10,4 +10,5 @@ record class InterfaceDeclarationDetails(
     InterfaceDeclarationSyntax InterfaceDeclaration,
     AttributeSyntax InteropAttribute,
     SyntaxTree SyntaxTree,
+    string InterfaceName,
     string ContainingNamespace);

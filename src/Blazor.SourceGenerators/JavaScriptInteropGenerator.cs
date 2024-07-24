@@ -28,40 +28,43 @@ internal sealed partial class JavaScriptInteropGenerator : IIncrementalGenerator
             .CreateSyntaxProvider(
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
                 transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx))
-            .WithComparer(new JavaScriptIncrementalValuesComparer())
-            .Where(m => m is not null);
+            .Where(m => m is not null)
+            .WithComparer(new JavaScriptIncrementalValuesComparer());
 
-        context.RegisterSourceOutput(syntaxProvider,
+        context.RegisterSourceOutput(
+            syntaxProvider,
             static (spc, source) => Execute(source, spc));
     }
 
     private static void Execute(InterfaceDeclarationDetails source, SourceProductionContext context)
     {
-        var (options, classDeclaration, _, syntaxTree, containingNamespace) = source;
+        var (options, interfaceDeclaration, _, syntaxTree, _, containingNamespace) = source;
 
         try
         {
             foreach (var parser in options.Parsers)
             {
                 var result = parser.ParseTargetType(options.TypeName!);
-                if (result is { Status: ParserResultStatus.SuccessfullyParsed, Value: { } })
+                if (result is not { Status: ParserResultStatus.SuccessfullyParsed, Value: { } })
                 {
-                    var namespaceString = (containingNamespace, classDeclaration.Parent) switch
-                    {
-                        (string { Length: > 0 }, _) => containingNamespace,
-                        (_, BaseNamespaceDeclarationSyntax namespaceDeclaration) => namespaceDeclaration.Name.ToString(),
-                        _ => null
-                    };
-
-                    var @interface = options.Implementation.ToInterfaceName();
-                    var implementation = options.Implementation.ToImplementationName();
-
-                    var topLevelObject = result.Value;
-                    context.AddDependentTypesSource(topLevelObject)
-                           .AddInterfaceSource(topLevelObject, @interface, options, namespaceString)
-                           .AddImplementationSource(topLevelObject, implementation, options, namespaceString)
-                           .AddDependencyInjectionExtensionsSource(topLevelObject, implementation, options);
+                    continue;
                 }
+
+                var namespaceString = (containingNamespace, interfaceDeclaration.Parent) switch
+                {
+                    (string { Length: > 0 }, _) => containingNamespace,
+                    (_, BaseNamespaceDeclarationSyntax namespaceDeclaration) => namespaceDeclaration.Name.ToString(),
+                    _ => null
+                };
+
+                var @interface = options.Implementation.ToInterfaceName();
+                var implementation = options.Implementation.ToImplementationName();
+
+                var topLevelObject = result.Value;
+                context.AddDependentTypesSource(topLevelObject)
+                       .AddInterfaceSource(topLevelObject, @interface, options, namespaceString)
+                       .AddImplementationSource(topLevelObject, implementation, options, namespaceString)
+                       .AddDependencyInjectionExtensionsSource(topLevelObject, implementation, options);
             }
         }
         catch (Exception ex)
@@ -105,6 +108,7 @@ internal sealed partial class JavaScriptInteropGenerator : IIncrementalGenerator
                    InterfaceDeclaration: interfaceDeclaration,
                    InteropAttribute: attribute,
                    SyntaxTree: context.Node.SyntaxTree,
+                   InterfaceName: typeSymbol.Name,
                    ContainingNamespace: typeSymbol.ContainingNamespace.ToDisplayString());
     }
 

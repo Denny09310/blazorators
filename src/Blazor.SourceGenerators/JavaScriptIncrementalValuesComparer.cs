@@ -7,11 +7,11 @@ internal class JavaScriptIncrementalValuesComparer : IEqualityComparer<Interface
 {
     public bool Equals(InterfaceDeclarationDetails x, InterfaceDeclarationDetails y)
     {
-        return x.InterfaceDeclaration.Identifier.Equals(y.InterfaceDeclaration.Identifier);
+        return x.InterfaceName.Equals(y.InterfaceName);
     }
 
     public int GetHashCode(InterfaceDeclarationDetails obj)
     {
-        return obj.InterfaceDeclaration.Identifier.GetHashCode();
+        return obj.InterfaceName.GetHashCode();
     }
 }
