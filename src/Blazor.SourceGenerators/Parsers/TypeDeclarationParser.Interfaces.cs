@@ -153,6 +153,8 @@ internal sealed partial class TypeDeclarationParser
 
             if (typeDescriptor != default)
             {
+                // TODO: Check for complex array type for example (string | number)[]
+                csharpObject = csharpObject with { ExtendsTypeName = $"IList<{typeName}>" };
                 csharpObject.DependentTypes.Add(typeName, ToObject(typeDescriptor));
             }
         }

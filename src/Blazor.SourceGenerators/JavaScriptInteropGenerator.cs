@@ -38,12 +38,15 @@ internal sealed partial class JavaScriptInteropGenerator : IIncrementalGenerator
 
     private static void Execute(InterfaceDeclarationDetails source, SourceProductionContext context)
     {
+        var cancellationToken = context.CancellationToken;
         var (options, interfaceDeclaration, _, syntaxTree, _, containingNamespace) = source;
 
         try
         {
             foreach (var parser in options.Parsers)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var result = parser.ParseTargetType(options.TypeName!);
                 if (result is not { Status: ParserResultStatus.SuccessfullyParsed, Value: { } })
                 {

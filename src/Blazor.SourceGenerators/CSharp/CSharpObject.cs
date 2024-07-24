@@ -48,7 +48,7 @@ internal record CSharpObject(
         builder.Append($"/// <summary>\r\n");
         builder.Append($"/// Source-generated object representing an ideally immutable <c>{TypeName}</c> value.\r\n");
         builder.Append($"/// </summary>\r\n");
-        builder.Append($"public class {TypeName}\r\n{{\r\n");
+        builder.Append($"public class {TypeName}{(!string.IsNullOrEmpty(ExtendsTypeName) ? $" : {ExtendsTypeName}": "")}\r\n{{\r\n");
 
         if (EnumValues.Count > 0)
         {
