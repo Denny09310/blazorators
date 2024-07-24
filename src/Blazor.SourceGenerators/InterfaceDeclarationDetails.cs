@@ -8,4 +8,6 @@ namespace Blazor.SourceGenerators;
 record class InterfaceDeclarationDetails(
     GeneratorOptions Options,
     InterfaceDeclarationSyntax InterfaceDeclaration,
-    AttributeSyntax InteropAttribute);
+    AttributeSyntax InteropAttribute,
+    SyntaxTree SyntaxTree,
+    string ContainingNamespace);

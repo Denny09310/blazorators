@@ -1,14 +1,12 @@
 ﻿// Copyright (c) David Pine. All rights reserved.
 // Licensed under the MIT License.
 
-using Blazor.SourceGenerators.Options;
-
 namespace Blazor.SourceGenerators;
 
 [Generator]
-internal sealed partial class JavaScriptInteropGenerator : ISourceGenerator
+internal sealed partial class JavaScriptInteropGenerator : IIncrementalGenerator
 {
-    private readonly HashSet<(string FileName, string SourceCode)> _sourceCodeToAdd =
+    private readonly HashSet<(string FileName, string SourceCode)> _sources =
     [
         (nameof(RecordCompat).ToGeneratedFileName(), RecordCompat),
         (nameof(BlazorHostingModel).ToGeneratedFileName(), BlazorHostingModel),
@@ -16,70 +14,53 @@ internal sealed partial class JavaScriptInteropGenerator : ISourceGenerator
         (nameof(JSAutoGenericInteropAttribute).ToGeneratedFileName(), JSAutoGenericInteropAttribute),
     ];
 
-    public void Initialize(GeneratorInitializationContext context)
+    public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Register a syntax receiver that will be created for each generation pass
-        context.RegisterForSyntaxNotifications(JavaScriptInteropSyntaxContextReceiver.Create);
+        context.RegisterPostInitializationOutput((ctx) =>
+        {
+            foreach (var (fileName, sourceCode) in _sources)
+            {
+                ctx.AddSource(fileName, SourceText.From(sourceCode, Encoding.UTF8));
+            }
+        });
+
+        var syntaxProvider = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
+                transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx))
+            .WithComparer(new JavaScriptIncrementalValuesComparer())
+            .Where(m => m is not null);
+
+        context.RegisterSourceOutput(syntaxProvider,
+            static (spc, source) => Execute(source, spc));
     }
 
-    public void Execute(GeneratorExecutionContext context) => TryExecute(context);
-
-    private void TryExecute(GeneratorExecutionContext context)
+    private static void Execute(InterfaceDeclarationDetails source, SourceProductionContext context)
     {
+        var (options, classDeclaration, _, syntaxTree, containingNamespace) = source;
+
         try
         {
-            // Add source from text.
-            foreach (var (fileName, sourceCode) in _sourceCodeToAdd)
+            foreach (var parser in options.Parsers)
             {
-                context.AddSource(fileName, SourceText.From(sourceCode, Encoding.UTF8));
-            }
-
-            if (context.SyntaxContextReceiver is not JavaScriptInteropSyntaxContextReceiver receiver)
-            {
-                return;
-            }
-
-            foreach (var (options, classDeclaration, attribute) in receiver.InterfaceDeclarations)
-            {
-                if (options is null || IsDiagnosticError(options, context, attribute))
+                var result = parser.ParseTargetType(options.TypeName!);
+                if (result is { Status: ParserResultStatus.SuccessfullyParsed, Value: { } })
                 {
-                    continue;
-                }
-
-                var isPartial = classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
-                if (!isPartial)
-                {
-                    continue;
-                }
-
-                var model = context.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
-                var symbol = model.GetDeclaredSymbol(classDeclaration);
-                if (symbol is not ITypeSymbol typeSymbol || typeSymbol.IsStatic)
-                {
-                    continue;
-                }
-
-                foreach (var parser in options.Parsers)
-                {
-                    var result = parser.ParseTargetType(options.TypeName!);
-                    if (result is { Status: ParserResultStatus.SuccessfullyParsed, Value: { } })
+                    var namespaceString = (containingNamespace, classDeclaration.Parent) switch
                     {
-                        var namespaceString = (typeSymbol.ContainingNamespace.ToDisplayString(), classDeclaration.Parent) switch
-                        {
-                            (string { Length: > 0 } containingNamespace, _) => containingNamespace,
-                            (_, BaseNamespaceDeclarationSyntax namespaceDeclaration) => namespaceDeclaration.Name.ToString(),
-                            _ => null
-                        };
+                        (string { Length: > 0 }, _) => containingNamespace,
+                        (_, BaseNamespaceDeclarationSyntax namespaceDeclaration) => namespaceDeclaration.Name.ToString(),
+                        _ => null
+                    };
 
-                        var @interface = options.Implementation.ToInterfaceName();
-                        var implementation = options.Implementation.ToImplementationName();
+                    var @interface = options.Implementation.ToInterfaceName();
+                    var implementation = options.Implementation.ToImplementationName();
 
-                        var topLevelObject = result.Value;
-                        context.AddDependentTypesSource(topLevelObject)
-                            .AddInterfaceSource(topLevelObject, @interface, options, namespaceString)
-                            .AddImplementationSource(topLevelObject, implementation, options, namespaceString)
-                            .AddDependencyInjectionExtensionsSource(topLevelObject, implementation, options);
-                    }
+                    var topLevelObject = result.Value;
+                    context.AddDependentTypesSource(topLevelObject)
+                           .AddInterfaceSource(topLevelObject, @interface, options, namespaceString)
+                           .AddImplementationSource(topLevelObject, implementation, options, namespaceString)
+                           .AddDependencyInjectionExtensionsSource(topLevelObject, implementation, options);
                 }
             }
         }
@@ -95,46 +76,42 @@ internal sealed partial class JavaScriptInteropGenerator : ISourceGenerator
                 diagnostic: Diagnostic.Create(
                     descriptor: Descriptors.SourceGenerationFailedDiagnostic,
                     location: Location.Create(
-                        syntaxTree: context.Compilation.SyntaxTrees.First(),
+                        syntaxTree,
                         textSpan: TextSpan.FromBounds(0, 100)),
                     messageArgs: ex.ToString()));
         }
     }
 
-    private static bool IsDiagnosticError(GeneratorOptions options, GeneratorExecutionContext context, AttributeSyntax attribute)
+    private static InterfaceDeclarationDetails GetSemanticTargetForGeneration(GeneratorSyntaxContext context)
     {
-        if (options.TypeName is null)
-        {
-            context.ReportDiagnostic(
-                Diagnostic.Create(
-                    Descriptors.TypeNameRequiredDiagnostic,
-                    attribute.GetLocation()));
+        var interfaceDeclaration = (InterfaceDeclarationSyntax)context.Node;
 
-            return true;
+        var isPartial = interfaceDeclaration.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword));
+        if (!isPartial) return null!;
+
+        var typeSymbol = context.SemanticModel.GetDeclaredSymbol(interfaceDeclaration);
+        if (typeSymbol is not ITypeSymbol symbol || symbol.IsStatic)
+        {
+            return null!;
         }
 
-        if (options.Implementation is null)
-        {
-            context.ReportDiagnostic(
-                Diagnostic.Create(
-                    Descriptors.PathFromWindowRequiredDiagnostic,
-                    attribute.GetLocation()));
+        var attribute = interfaceDeclaration.AttributeLists
+            .SelectMany(attributeList => attributeList.Attributes)
+            .FirstOrDefault(attribute => attribute.Name.ToString() is "JSAutoInterop" or "JSAutoGenericInterop");
 
-            return true;
-        }
+        if (attribute == null) return null!;
 
-        if (options.SupportsGenerics &&
-            !context.Compilation.ReferencedAssemblyNames.Any(
-                ai => ai.Name.Equals("Blazor.Serialization", StringComparison.OrdinalIgnoreCase)))
-        {
-            context.ReportDiagnostic(
-                Diagnostic.Create(
-                    Descriptors.MissingBlazorSerializationPackageReferenceDiagnostic,
-                    attribute.GetLocation()));
+        return new(Options: attribute.GetGeneratorOptions(attribute.Name.ToString() is "JSAutoGenericInterop"),
+                   InterfaceDeclaration: interfaceDeclaration,
+                   InteropAttribute: attribute,
+                   SyntaxTree: context.Node.SyntaxTree,
+                   ContainingNamespace: typeSymbol.ContainingNamespace.ToDisplayString());
+    }
 
-            return true;
-        }
-
-        return false;
+    private static bool IsSyntaxTargetForGeneration(SyntaxNode syntax)
+    {
+        return syntax is InterfaceDeclarationSyntax interfaceDeclaration
+            && interfaceDeclaration.AttributeLists.Any(attributeList => attributeList.Attributes
+                .Any(attribute => attribute.Name.ToString() is "JSAutoInterop" or "JSAutoGenericInterop"));
     }
 }
