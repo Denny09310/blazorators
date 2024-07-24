@@ -7,7 +7,7 @@ namespace Blazor.SourceGenerators.Extensions;
 
 internal static class GeneratorExecutionContextExtensions
 {
-    internal static GeneratorExecutionContext AddDependentTypesSource(this GeneratorExecutionContext context, CSharpTopLevelObject topLevelObject)
+    internal static SourceProductionContext AddDependentTypesSource(this SourceProductionContext context, CSharpTopLevelObject topLevelObject)
     {
         var dependentTypes = topLevelObject.AllDependentTypes.Where(type => !type.Object.IsActionParameter);
         foreach (var (type, dependentObj) in dependentTypes)
@@ -20,8 +20,8 @@ internal static class GeneratorExecutionContextExtensions
         return context;
     }
 
-    internal static GeneratorExecutionContext AddInterfaceSource(
-        this GeneratorExecutionContext context,
+    internal static SourceProductionContext AddInterfaceSource(
+        this SourceProductionContext context,
         CSharpTopLevelObject topLevelObject,
         string @interface,
         GeneratorOptions options,
@@ -36,8 +36,8 @@ internal static class GeneratorExecutionContextExtensions
         return context;
     }
 
-    internal static GeneratorExecutionContext AddImplementationSource(
-        this GeneratorExecutionContext context,
+    internal static SourceProductionContext AddImplementationSource(
+        this SourceProductionContext context,
         CSharpTopLevelObject topLevelObject,
         string implementation,
         GeneratorOptions options,
@@ -52,8 +52,8 @@ internal static class GeneratorExecutionContextExtensions
         return context;
     }
 
-    internal static GeneratorExecutionContext AddDependencyInjectionExtensionsSource(
-        this GeneratorExecutionContext context,
+    internal static SourceProductionContext AddDependencyInjectionExtensionsSource(
+        this SourceProductionContext context,
         CSharpTopLevelObject _,
         string implementation,
         GeneratorOptions options)

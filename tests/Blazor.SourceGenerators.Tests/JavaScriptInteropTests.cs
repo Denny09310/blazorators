@@ -8,27 +8,28 @@ namespace Blazor.SourceGenerators.Tests;
 
 public class JavaScriptInteropTests : GeneratorBaseUnitTests
 {
-    public override IEnumerable<ISourceGenerator> SourceGenerators =>
-        new[] { new JavaScriptInteropGenerator() };
+    public override IEnumerable<IIncrementalGenerator> SourceGenerators => [new JavaScriptInteropGenerator()];
 
-    public SyntaxTree GetGeneratedTree(string sourceCode)
-    {
-        var result = GetRunResult(sourceCode);
-        return result.GeneratedTrees.Single(x => x.FilePath.Contains("Extensions"));
-    }
 
     [Fact]
     public void Basic()
     {
         // TODO: write test
-        _ = @"
-using System;
-using Microsoft.JSInterop.Attributes;
+        var sourceCode = """
 
-#pragma warning disable 649
+            using System;
+            using Microsoft.JSInterop.Attributes;
 
-[JavaScriptInterop]
-public static partial class 
-";
+            #pragma warning disable 649
+
+            [JSAutoInterop(
+                TypeName = "Geolocation",
+                Implementation = "window.navigator.geolocation",
+                Url = "https://developer.mozilla.org/docs/Web/API/Geolocation")]
+            public partial interface IGeolocationService;
+
+            """;
+
+        _ = GetRunResult(sourceCode);
     }
 }

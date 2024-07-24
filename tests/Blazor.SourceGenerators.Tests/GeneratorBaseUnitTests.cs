@@ -13,10 +13,9 @@ namespace Blazor.SourceGenerators.Tests;
 /// </summary>
 public abstract class GeneratorBaseUnitTests
 {
-    public abstract IEnumerable<ISourceGenerator> SourceGenerators { get; }
+    public abstract IEnumerable<IIncrementalGenerator> SourceGenerators { get; }
 
-    public static Compilation GetCompilation(string sourceCode) =>
-        GetCompilation(new[] { CSharpSyntaxTree.ParseText(sourceCode) });
+    public static Compilation GetCompilation(string sourceCode) => GetCompilation([CSharpSyntaxTree.ParseText(sourceCode)]);
 
     public static Compilation GetCompilation(IEnumerable<SyntaxTree> syntaxTrees)
     {
@@ -34,10 +33,8 @@ public abstract class GeneratorBaseUnitTests
     public GeneratorDriverRunResult GetRunResult(string sourceCode)
     {
         var compilation = GetCompilation(sourceCode);
-        var driver = CSharpGeneratorDriver.Create(SourceGenerators);
-        return driver
-            .RunGenerators(compilation)
-            .GetRunResult();
+        var driver = CSharpGeneratorDriver.Create(SourceGenerators.Select(generator => generator.AsSourceGenerator()));
+        return driver.RunGenerators(compilation).GetRunResult();
     }
 
     public void VerifyCompiles(string sourceCode)
