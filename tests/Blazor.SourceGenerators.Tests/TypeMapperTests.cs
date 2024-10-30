@@ -15,7 +15,7 @@ public class TypeMapperTests
     {
         static Dictionary<string, DeclarationStatement> GetTypeMapWithPotential(bool timePenalty)
         {
-            var mapper = new TypeMapperBuilder();
+            var mapper = new DependencyMapBuilder();
 
             var startingTimestamp = Stopwatch.GetTimestamp();
             var sut = mapper.Build;

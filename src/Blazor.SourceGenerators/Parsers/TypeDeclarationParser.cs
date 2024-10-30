@@ -8,13 +8,13 @@ internal sealed partial class TypeDeclarationParser
     private static readonly Lazy<TypeDeclarationParser> _parser =
         new(valueFactory: () => new TypeDeclarationParser(TypeDeclarationReader.Default));
 
-    private readonly TypeMapperBuilder _mapper;
+    private readonly DependencyMapBuilder _mapper;
     private readonly TypeDeclarationReader _reader;
 
     internal TypeDeclarationParser(TypeDeclarationReader reader)
     {
         _reader = reader;
-        _mapper = new TypeMapperBuilder().WithReader(_reader);
+        _mapper = new DependencyMapBuilder().WithReader(_reader);
     }
 
     internal static TypeDeclarationParser Default => _parser.Value;

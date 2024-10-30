@@ -5,7 +5,7 @@ using Blazor.SourceGenerators.TypeScript.Types;
 
 namespace Blazor.SourceGenerators.Types;
 
-internal class TypeMapperBuilder()
+internal class DependencyMapBuilder()
 {
     private static readonly ConcurrentDictionary<string, TypeDescriptor> _cache = [];
 
@@ -33,7 +33,7 @@ internal class TypeMapperBuilder()
         return descriptor;
     }
 
-    public TypeMapperBuilder WithReader(TypeDeclarationReader reader)
+    public DependencyMapBuilder WithReader(TypeDeclarationReader reader)
     {
         _reader = reader;
         return this;
@@ -44,7 +44,6 @@ internal class TypeMapperBuilder()
         typeName = typeName.FormatTypeName();
         if (_found.Contains(typeName)) return default;
 
-        // FIXME: For now avoid parsing all event related members
         if (typeName.Contains("Event")) return default;
 
         if (!TryGetDeclaration(typeName, out var declaration)) return default;
